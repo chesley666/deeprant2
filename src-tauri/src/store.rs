@@ -56,6 +56,7 @@ pub struct AppSettings {
     pub model_type: String,
     pub custom_model: ModelConfig,
     pub phrases: Vec<Phrase>,
+    pub phrases_enabled: bool,
 }
 
 // 初始化默认设置
@@ -105,7 +106,8 @@ pub fn initialize_settings(app: &AppHandle) -> Result<(), anyhow::Error> {
             "api_url": "https://api.openai.com/v1/chat/completions",
             "model_name": "gpt-3.5-turbo"
         },
-        "phrases": phrases
+        "phrases": phrases,
+        "phrases_enabled": true
     });
 
     store.set("settings", default_settings);

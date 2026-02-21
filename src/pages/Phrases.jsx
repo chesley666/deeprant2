@@ -1,19 +1,63 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useStore } from '../components/StoreProvider';
 
 export default function Phrases() {
-    const { settings } = useStore();
+    const { settings, updateSettings } = useStore();
+    const [isEnabled, setIsEnabled] = useState(settings?.phrases_enabled ?? true);
     const phrases = settings?.phrases || [];
+
+    useEffect(() => {
+        setIsEnabled(settings?.phrases_enabled ?? true);
+    }, [settings?.phrases_enabled]);
+
+    const handleToggle = async () => {
+        const newState = !isEnabled;
+        setIsEnabled(newState);
+        await updateSettings({ phrases_enabled: newState });
+    };
 
     return (
         <div className="h-full flex flex-col gap-6 p-6 ">
+            {/* 常用语开关卡片 */}
             <motion.div
                 className="w-full bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] backdrop-blur-sm"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
             >
-                <h1 className="text-2xl font-bold text-zinc-900 dark:text-white mb-6">常用语</h1>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white mb-2">常用语</h1>
+                        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                            {isEnabled ? '快捷键已启用' : '快捷键已禁用'}
+                        </p>
+                    </div>
+                    <button
+                        onClick={handleToggle}
+                        className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors focus:outline-none ${
+                            isEnabled
+                                ? 'bg-green-500 hover:bg-green-600'
+                                : 'bg-zinc-300 dark:bg-zinc-600 hover:bg-zinc-400 dark:hover:bg-zinc-500'
+                        }`}
+                    >
+                        <span
+                            className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                                isEnabled ? 'translate-x-9' : 'translate-x-1'
+                            }`}
+                        />
+                    </button>
+                </div>
+            </motion.div>
+
+            {/* 常用语表格卡片 */}
+            <motion.div
+                className={`w-full bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] backdrop-blur-sm transition-opacity ${
+                    !isEnabled ? 'opacity-50 pointer-events-none' : ''
+                }`}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+            >
                 <div className="overflow-auto">
                     <table className="min-w-full">
                         <thead>

@@ -30,14 +30,24 @@ async fn update_translator_shortcut(
 }
 
 #[tauri::command]
+async fn translate_text(app_handle: tauri::AppHandle, text: String) -> Result<String, String> {
+    ai_translator::translate_with_gpt(&app_handle, &text)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn get_settings(app_handle: tauri::AppHandle) -> Result<store::AppSettings, String> {
     store::get_settings(&app_handle).map_err(|e| e.to_string())
 }
 
 pub fn run() {
     println!("Starting application...");
+    
+    // 加载 .env 文件
+    let _ = dotenvy::dotenv();
 
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -74,7 +84,8 @@ pub fn run() {
             update_translator_shortcut,
             log_to_backend,
             get_settings,
-            get_version
+            get_version,
+            translate_text
         ]);
 
     // 只在非Windows系统上添加窗口事件监听

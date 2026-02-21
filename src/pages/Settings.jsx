@@ -3,6 +3,7 @@ import { Server, Crown, Sparkles, Cube } from '../icons';
 import { useState, useEffect } from 'react';
 import { useStore } from '../components/StoreProvider';
 import { showSuccess, showError } from '../utils/toast';
+import { invoke } from '@tauri-apps/api/core';
 
 // 添加测试函数
 const testOpenAIConnection = async (apiKey, baseUrl, modelName) => {
@@ -27,17 +28,33 @@ const testOpenAIConnection = async (apiKey, baseUrl, modelName) => {
             })
         });
 
-        const data = await response.json();
+        // 先获取原始文本
+        const text = await response.text();
+        console.log('API响应状态:', response.status);
+        console.log('API响应内容:', text);
+
+        // 检查 HTTP 状态码
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${text.substring(0, 200)}`);
+        }
+
+        // 尝试解析 JSON
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (parseError) {
+            throw new Error(`响应不是有效的JSON格式: ${text.substring(0, 100)}`);
+        }
 
         if (data.error) {
-            throw new Error(data.error.message || '未知错误');
+            throw new Error(data.error.message || JSON.stringify(data.error));
         }
 
         if (data.choices && data.choices[0] && data.choices[0].message) {
             return true;
         }
 
-        throw new Error('响应格式不正确');
+        throw new Error('响应格式不正确: ' + JSON.stringify(data).substring(0, 100));
     } catch (error) {
         throw new Error(`API测试失败: ${error.message}`);
     }
@@ -47,17 +64,17 @@ const MODEL_OPTIONS = [
     {
         id: 'deepseek',
         name: 'DeepSeek',
-        modelName: 'deepseek-chat'
+        modelName: 'deepseek-ai/DeepSeek-V3.2'
     },
     {
-        id: 'deepseek-R1',
-        name: 'DeepSeek R1',
-        modelName: 'deepseek-reasoner'
+        id: 'DeepSeek-OCR',  
+        name: 'DeepSeek-OCR',  
+        modelName: 'deepseek-ai/DeepSeek-OCR'  
     },
     {
-        id: 'stepfun',
-        name: '阶跃星辰',
-        modelName: 'step-2-16k'
+        id: 'GLM',  
+        name: 'GLM',  
+        modelName: 'glm-4.7-flash'  
     },
     {
         id: 'custom',
@@ -70,6 +87,9 @@ export default function Settings() {
     const { settings, updateSettings } = useStore();
     const [activeModel, setActiveModel] = useState(settings?.model_type || 'deepseek');
     const [isTestingConnection, setIsTestingConnection] = useState(false);
+    const [testInput, setTestInput] = useState('');
+    const [testOutput, setTestOutput] = useState('');
+    const [isTestingTranslate, setIsTestingTranslate] = useState(false);
 
     useEffect(() => {
         if (settings?.model_type) {
@@ -80,6 +100,26 @@ export default function Settings() {
     const handleModelChange = async (model) => {
         setActiveModel(model);
         await updateSettings({ model_type: model });
+    };
+
+    const handleTestTranslate = async () => {
+        if (!testInput.trim()) {
+            showError('请输入测试文本');
+            return;
+        }
+        setIsTestingTranslate(true);
+        setTestOutput('');
+        try {
+            const result = await invoke('translate_text', {
+                text: testInput.trim(),
+            });
+            setTestOutput(result);
+            showSuccess('模型测试完成');
+        } catch (error) {
+            showError(error?.message || '模型测试失败');
+        } finally {
+            setIsTestingTranslate(false);
+        }
     };
 
     return (
@@ -264,6 +304,58 @@ export default function Settings() {
                                 </button>
                             )}
                         </div>
+                    </div>
+                </motion.div>
+
+                {/* 模型测试卡片 */}
+                <motion.div
+                    className="md:col-span-2 flex flex-col bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] backdrop-blur-sm"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.15 }}
+                >
+                    <div className="flex items-center gap-3 text-sm text-zinc-500 mb-4">
+                        <Server className="w-5 h-5 stroke-zinc-500" />
+                        模型测试
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm text-zinc-500 mb-2">测试输入</label>
+                            <textarea
+                                value={testInput}
+                                onChange={(e) => setTestInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (!isTestingTranslate) {
+                                            handleTestTranslate();
+                                        }
+                                    }
+                                }}
+                                className="w-full min-h-[120px] px-4 py-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-700 dark:text-zinc-300"
+                                placeholder="输入要测试的文本，按 Ctrl+Enter 触发测试"
+                            />
+                            <p className="mt-2 text-xs text-zinc-400">快捷键：Ctrl+Enter（Mac 为 ⌘+Enter）</p>
+                        </div>
+                        <div>
+                            <label className="block text-sm text-zinc-500 mb-2">输出结果</label>
+                            <div className="w-full min-h-[120px] px-4 py-3 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-lg text-sm text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap">
+                                {isTestingTranslate ? '模型测试中...' : (testOutput || '等待测试结果')}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between">
+                        <p className="text-xs text-zinc-400">使用当前模型与翻译设置进行测试</p>
+                        <button
+                            onClick={handleTestTranslate}
+                            disabled={isTestingTranslate}
+                            className={`px-3 py-1.5 text-xs text-white bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 rounded-lg transition-all flex items-center gap-2
+                                ${isTestingTranslate
+                                    ? 'opacity-70 cursor-not-allowed'
+                                    : 'hover:bg-zinc-800 dark:hover:bg-zinc-200'}`}
+                        >
+                            {isTestingTranslate ? '测试中...' : '执行测试'}
+                        </button>
                     </div>
                 </motion.div>
             </div>
