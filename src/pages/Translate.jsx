@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { GamingPad, ChatBubbleMessage, FaceOldFace, Whistle } from '../icons';
+import { GamingPad, ChatBubbleMessage, FaceOldFace, Whistle, FaceSmile } from '../icons';
 import { useStore } from '../components/StoreProvider';
 
 export default function Translate() {
@@ -42,13 +42,37 @@ export default function Translate() {
             </motion.div>
 
             {/* 模式选择卡片 */}
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {/* 和谐模式 */}
+                <motion.div
+                    className={getCardClassName(activeMode === 'hexie')}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    onClick={() => handleModeChange('hexie')}
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 text-sm text-zinc-500">
+                            <FaceSmile className="w-6 h-6 stroke-zinc-500" />
+                            和谐模式
+                        </div>
+                        <div className={`w-10 h-6 rounded-full transition-colors ${activeMode === 'hexie' ? 'bg-zinc-900 dark:bg-zinc-100' : 'bg-zinc-200 dark:bg-zinc-700'
+                            } relative`}>
+                            <div className={`absolute w-4 h-4 rounded-full bg-white dark:bg-zinc-900 top-1 transition-all ${activeMode === 'hexie' ? 'left-5' : 'left-1'
+                                }`} />
+                        </div>
+                    </div>
+                    <div className="mt-4 text-sm text-zinc-400">
+                        用暖心鼓励的语言表达，适合友好交流和鼓励队友的场景。
+                    </div>
+                </motion.div>
+
                 {/* 嘴臭模式 */}
                 <motion.div
                     className={getCardClassName(activeMode === 'toxic')}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
+                    transition={{ delay: 0.15 }}
                     onClick={() => handleModeChange('toxic')}
                 >
                     <div className="flex items-center justify-between">
@@ -96,7 +120,7 @@ export default function Translate() {
                     className={getCardClassName(activeMode === 'auto')}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
+                    transition={{ delay: 0.25 }}
                     onClick={() => handleModeChange('auto')}
                 >
                     <div className="flex items-center justify-between">

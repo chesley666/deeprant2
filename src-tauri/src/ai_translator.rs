@@ -55,6 +55,16 @@ fn get_system_prompt(from: &str, to: &str, scene: &str, mode: &str, daily_mode: 
     };
 
     let mode_desc = match mode {
+        "hexie" => {
+            r#"<toxic_style>
+                翻译/改写用户原文后，还需进行简单扩写，不超过50字
+                用最为暖心的语境来鼓励评价队友或对手
+                押韵对偶排比等修辞手法来增加语言的感染力
+                敬称对方为老铁，总裁，老板，大佬，大帅B，吴彦祖，哥哥，等等
+            </toxic_style>
+            <references>鸡汤文学</references>
+            <rules>使用FPS/MOBA黑话重构</rules>"#
+        },
         "toxic" => {
             r#"<toxic_style>
                 翻译/改写用户原文后，还需进行简单扩写，不超过50字
@@ -64,7 +74,7 @@ fn get_system_prompt(from: &str, to: &str, scene: &str, mode: &str, daily_mode: 
             </toxic_style>
             <references>中文: 百度贴吧老哥风格,充满网络喷子式的毒鸡汤,游戏嘲讽</references>
             <rules>使用FPS/MOBA黑话重构</rules>"#
-        }
+        },
         "pro" => {
             r#"<pro_style>
             赛事解说风格
