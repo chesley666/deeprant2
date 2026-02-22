@@ -51,6 +51,11 @@ fn get_config_dir_hint() -> &'static str {
     ai_translator::get_config_dir_hint()
 }
 
+#[tauri::command]
+fn toggle_phrase_shortcuts(app_handle: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    shortcut::toggle_phrase_shortcuts(&app_handle, enabled)
+}
+
 pub fn run() {
     println!("Starting application...");
     
@@ -124,7 +129,8 @@ pub fn run() {
             get_system_model_configs,
             get_config_dir_hint,
             get_version,
-            translate_text
+            translate_text,
+            toggle_phrase_shortcuts
         ]);
 
     // 只在非Windows系统上添加窗口事件监听

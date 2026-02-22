@@ -139,8 +139,23 @@ pub fn init_shortcuts(app: &AppHandle) -> Result<(), String> {
         create_trans_handler(app.clone()),
     )?;
 
-    // 注册常用语快捷键
-    for phrase in settings.phrases {
+    // 只有当常用语开关开启时才注册常用语快捷键
+    if settings.phrases_enabled {
+        println!("常用语开关已开启，注册常用语快捷键");
+        register_phrase_shortcuts(app, &settings.phrases)?;
+    } else {
+        println!("常用语开关已关闭，跳过注册常用语快捷键");
+    }
+
+    Ok(())
+}
+
+/// 注册常用语快捷键
+fn register_phrase_shortcuts(
+    app: &AppHandle,
+    phrases: &[crate::store::Phrase],
+) -> Result<(), String> {
+    for phrase in phrases {
         let phrase_text = phrase.phrase.clone();
         let app_handle = app.clone();
 
@@ -161,8 +176,36 @@ pub fn init_shortcuts(app: &AppHandle) -> Result<(), String> {
             },
         )?;
     }
-
     Ok(())
+}
+
+/// 注销所有常用语快捷键
+pub fn unregister_phrase_shortcuts(app: &AppHandle) -> Result<(), String> {
+    let settings = get_settings(app).map_err(|e| e.to_string())?;
+    let global_shortcut = app.global_shortcut();
+
+    for phrase in settings.phrases {
+        if let Ok(code) = Code::from_str(&phrase.hotkey.key) {
+            let shortcut = Shortcut::new(Some(parse_modifiers(&phrase.hotkey.modifiers)), code);
+            match global_shortcut.unregister(shortcut) {
+                Ok(_) => println!("注销常用语快捷键成功: {}", phrase.hotkey.shortcut),
+                Err(e) => println!("注销常用语快捷键失败: {} - {}", phrase.hotkey.shortcut, e),
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 切换常用语快捷键状态
+pub fn toggle_phrase_shortcuts(app: &AppHandle, enabled: bool) -> Result<(), String> {
+    if enabled {
+        println!("启用常用语快捷键");
+        let settings = get_settings(app).map_err(|e| e.to_string())?;
+        register_phrase_shortcuts(app, &settings.phrases)
+    } else {
+        println!("禁用常用语快捷键");
+        unregister_phrase_shortcuts(app)
+    }
 }
 
 /// 更新翻译快捷键

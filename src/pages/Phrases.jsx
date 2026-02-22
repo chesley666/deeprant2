@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useStore } from '../components/StoreProvider';
+import { invoke } from '@tauri-apps/api/core';
 
 export default function Phrases() {
     const { settings, updateSettings } = useStore();
@@ -15,6 +16,14 @@ export default function Phrases() {
         const newState = !isEnabled;
         setIsEnabled(newState);
         await updateSettings({ phrases_enabled: newState });
+        
+        // 调用后端切换快捷键注册状态
+        try {
+            await invoke('toggle_phrase_shortcuts', { enabled: newState });
+            console.log(`常用语快捷键已${newState ? '启用' : '禁用'}`);
+        } catch (error) {
+            console.error('切换快捷键状态失败:', error);
+        }
     };
 
     return (
