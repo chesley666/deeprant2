@@ -41,11 +41,48 @@ async fn get_settings(app_handle: tauri::AppHandle) -> Result<store::AppSettings
     store::get_settings(&app_handle).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_system_model_configs() -> std::collections::BTreeMap<String, store::ModelConfig> {
+    ai_translator::get_system_model_configs()
+}
+
+#[tauri::command]
+fn get_config_dir_hint() -> &'static str {
+    ai_translator::get_config_dir_hint()
+}
+
 pub fn run() {
     println!("Starting application...");
     
-    // 加载 .env 文件
-    let _ = dotenvy::dotenv();
+    // 加载顺序：exe同级目录 > 项目根目录（开发时）
+    let mut env_loaded = false;
+    
+    // 1. 尝试从exe同级目录加载 .env（打包发布后）
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let env_file = exe_dir.join(".env");
+            if env_file.exists() {
+                match dotenvy::from_filename(&env_file) {
+                    Ok(_) => {
+                        println!("✓ 从exe同级目录加载 .env 成功: {:?}", env_file);
+                        env_loaded = true;
+                    }
+                    Err(e) => println!("⚠ 加载 .env 失败: {}", e),
+                }
+            }
+        }
+    }
+    
+    // 2. 如果还未加载，尝试从项目根目录加载（开发时）
+    if !env_loaded && std::path::Path::new(".env").exists() {
+        println!("✓ 从项目根目录加载 .env");
+        let _ = dotenvy::dotenv();
+        env_loaded = true;
+    }
+    
+    if !env_loaded {
+        println!("⚠ 未找到 .env 文件。请将 .env 文件放在应用目录同级位置");
+    }
 
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -84,6 +121,8 @@ pub fn run() {
             update_translator_shortcut,
             log_to_backend,
             get_settings,
+            get_system_model_configs,
+            get_config_dir_hint,
             get_version,
             translate_text
         ]);

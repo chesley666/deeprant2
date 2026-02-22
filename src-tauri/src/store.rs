@@ -100,7 +100,7 @@ pub fn initialize_settings(app: &AppHandle) -> Result<(), anyhow::Error> {
         "game_scene": "dota2",
         "translation_mode": "toxic",
         "daily_mode": false,
-        "model_type": "deepseek",
+        "model_type": "MODELSCOPE",
         "custom_model": {
             "auth": "",
             "api_url": "https://api.openai.com/v1/chat/completions",

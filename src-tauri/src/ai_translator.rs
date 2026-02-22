@@ -1,7 +1,8 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde_json::{json, Value};
 use tauri::AppHandle;
+use std::collections::BTreeMap;
 
 fn get_system_prompt(from: &str, to: &str, scene: &str, mode: &str, daily_mode: bool) -> String {
     // 语言代码映射到中文名称的辅助函数
@@ -56,48 +57,48 @@ fn get_system_prompt(from: &str, to: &str, scene: &str, mode: &str, daily_mode: 
     let mode_desc = match mode {
         "toxic" => {
             r#"<toxic_style>
-                • 翻译/改写用户原文后，还需进行简单扩写，不超过50字
-                • 用最为地狱毒舌的心态来攻击对手
-                • 融入游戏场景梗
-                • 符号化敏感词（如f*ck/傻*/草nm）
+                翻译/改写用户原文后，还需进行简单扩写，不超过50字
+                用最为地狱毒舌的心态来攻击对手
+                融入游戏场景梗
+                符号化敏感词（如f*ck/傻*/草nm）
             </toxic_style>
             <references>中文: 百度贴吧老哥风格,充满网络喷子式的毒鸡汤,游戏嘲讽</references>
             <rules>使用FPS/MOBA黑话重构</rules>"#
         }
         "pro" => {
             r#"<pro_style>
-            • 赛事解说风格
-            • 25字以内短句
-            • 优先使用目标语言的正式术语
-            • 添加战术标记（[推线]/[Gank]）
+            赛事解说风格
+            25字以内短句
+            优先使用目标语言的正式术语
+            添加战术标记（[推线]/[Gank]）
             </pro_style>
 
             <rhythm>
-            • 0.5秒可读速度
-            • 去除冗余修饰词
+            0.5秒可读速度
+            去除冗余修饰词
             </rhythm>"#
         }
         "auto" => match scene {
             "dota2" | "lol" => {
                 r#"<moba_style>
-                • 保留技能,装备,英雄等缩写
-                • 使用MOBA游戏特有黑话
-                • 不要额外增加英雄名称
+                保留技能,装备,英雄等缩写
+                使用MOBA游戏特有黑话
+                不要额外增加英雄名称
                 </moba_style>"#
             }
             "csgo" => {
                 r#"<fps_style>
-                • 使用FPS战术简称(A1、B2等)
-                • 转换为标准报点格式
-                • 保留英文武器代号
-                • 使用经济术语(eco、force等)
+                使用FPS战术简称(A1、B2等)
+                转换为标准报点格式
+                保留英文武器代号
+                使用经济术语(eco、force等)
                 </fps_style>"#
             }
             _ => {
                 r#"<general_style>
-                • 识别并保留游戏术语
-                • 转换为玩家间常用表达
-                • 保持游戏交流的简洁性
+                识别并保留游戏术语
+                转换为玩家间常用表达
+                保持游戏交流的简洁性
                 </general_style>"#
             }
         },
@@ -107,30 +108,30 @@ fn get_system_prompt(from: &str, to: &str, scene: &str, mode: &str, daily_mode: 
     let scene_desc = match scene {
         "dota2" => {
             r#"<context>
-            • 环境: DOTA2
-            • 保留技能,装备（如BKB）,英雄（如ES=撼地神牛）等缩写
-            • 使用赛事解说术语（如“对线”、“推塔”、“团战”）
+            环境: DOTA2
+            保留技能,装备（如BKB）,英雄（如ES=撼地神牛）等缩写
+            使用赛事解说术语（如“对线”、“推塔”、“团战”）
             </context>"#
         }
         "lol" => {
             r#"<context>
-            • 英雄联盟游戏环境
-            • 保留技能和装备简称
-            • 使用赛事解说术语
+            英雄联盟游戏环境
+            保留技能和装备简称
+            使用赛事解说术语
             </context>"#
         }
         "csgo" => {
             r#"<context>
-            • CS:GO游戏环境
-            • 保留武器和位置代号
-            • 使用标准战术用语
+            CS:GO游戏环境
+            保留武器和位置代号
+            使用标准战术用语
             </context>"#
         }
         _ => {
             r#"<context>
-            • 通用游戏环境
-            • 识别常见游戏用语
-            • 保持游戏交流特点
+            通用游戏环境
+            识别常见游戏用语
+            保持游戏交流特点
             </context>"#
         }
     };
@@ -138,38 +139,88 @@ fn get_system_prompt(from: &str, to: &str, scene: &str, mode: &str, daily_mode: 
     format!(
         r#"{}{}{}
         <compliance>
-        • 严格长度不超过50字
-        • 敏感词二次过滤
+        严格长度不超过50字
+        敏感词二次过滤
         </compliance>
         <output_format>仅输出一条最终翻译结果，不要包含任何思考过程或解释</output_format>"#,
         base, mode_desc, scene_desc
     )
 }
 
-fn get_model_config(settings: &crate::store::AppSettings) -> crate::store::ModelConfig {
-    use std::env;
-    
+fn get_env_or_empty(key: &str) -> String {
+    std::env::var(key).unwrap_or_default()
+}
+
+fn require_env(key: &str) -> Result<String> {
+    std::env::var(key).map_err(|_| anyhow!("请在 .env 文件中设置 {}", key))
+}
+
+/// 获取配置目录路径提示（用于用户文档）
+pub fn get_config_dir_hint() -> &'static str {
+    "应用所在目录"
+}
+
+pub fn get_system_model_configs() -> BTreeMap<String, crate::store::ModelConfig> {
+    let mut configs = BTreeMap::new();
+
+    configs.insert(
+        "MODELSCOPE".to_string(),
+        crate::store::ModelConfig {
+            auth: get_env_or_empty("MODELSCOPE_API_KEY"),
+            api_url: get_env_or_empty("MODELSCOPE_API_URL"),
+            model_name: get_env_or_empty("MODELSCOPE_MODEL_NAME"),
+        },
+    );
+
+    configs.insert(
+        "SILICONFLOW".to_string(),
+        crate::store::ModelConfig {
+            auth: get_env_or_empty("SILICONFLOW_API_KEY"),
+            api_url: get_env_or_empty("SILICONFLOW_API_URL"),
+            model_name: get_env_or_empty("SILICONFLOW_MODEL_NAME"),
+        },
+    );
+
+    configs.insert(
+        "BIGMODEL".to_string(),
+        crate::store::ModelConfig {
+            auth: get_env_or_empty("BIGMODEL_API_KEY"),
+            api_url: get_env_or_empty("BIGMODEL_API_URL"),
+            model_name: get_env_or_empty("BIGMODEL_MODEL_NAME"),
+        },
+    );
+
+    configs
+}
+
+fn get_model_config(settings: &crate::store::AppSettings) -> Result<crate::store::ModelConfig> {
     match settings.model_type.as_str() {
-        "deepseek" => crate::store::ModelConfig {
-            auth: env::var("DEEPSEEK_API_KEY")
-                .expect("请在 .env 文件中设置 DEEPSEEK_API_KEY"),
-            api_url: "https://api-inference.modelscope.cn/v1/chat/completions".to_string(),
-            model_name: "deepseek-ai/DeepSeek-V3.2".to_string(),
-        },
-        "DeepSeek-OCR" => crate::store::ModelConfig {
-            auth: env::var("DEEPSEEK_OCR_API_KEY")
-                .expect("请在 .env 文件中设置 DEEPSEEK_OCR_API_KEY"),
-            api_url: "https://api.siliconflow.cn/v1/chat/completions".to_string(),
-            model_name: "deepseek-ai/DeepSeek-OCR".to_string(),
-        },
-        "GLM" => crate::store::ModelConfig {
-            auth: env::var("GLM_API_KEY")
-                .expect("请在 .env 文件中设置 GLM_API_KEY"),
-            api_url: "https://open.bigmodel.cn/api/paas/v4/chat/completions".to_string(),
-            model_name: "glm-4.7-flash".to_string(),
-        },
-        "custom" => settings.custom_model.clone(),
-        _ => settings.custom_model.clone(),
+        "MODELSCOPE" => Ok(crate::store::ModelConfig {
+            auth: require_env("MODELSCOPE_API_KEY")?,
+            api_url: require_env("MODELSCOPE_API_URL")?,
+            model_name: require_env("MODELSCOPE_MODEL_NAME")?,
+        }),
+        "SILICONFLOW" => Ok(crate::store::ModelConfig {
+            auth: require_env("SILICONFLOW_API_KEY")?,
+            api_url: require_env("SILICONFLOW_API_URL")?,
+            model_name: require_env("SILICONFLOW_MODEL_NAME")?,
+        }),
+        "BIGMODEL" => Ok(crate::store::ModelConfig {
+            auth: require_env("BIGMODEL_API_KEY")?,
+            api_url: require_env("BIGMODEL_API_URL")?,
+            model_name: require_env("BIGMODEL_MODEL_NAME")?,
+        }),
+        "custom" => {
+            if settings.custom_model.auth.is_empty()
+                || settings.custom_model.api_url.is_empty()
+                || settings.custom_model.model_name.is_empty()
+            {
+                Err(anyhow!("自定义模型配置不完整"))
+            } else {
+                Ok(settings.custom_model.clone())
+            }
+        }
+        _ => Ok(settings.custom_model.clone()),
     }
 }
 
@@ -183,7 +234,7 @@ pub async fn translate_with_gpt(app: &AppHandle, original: &str) -> Result<Strin
     println!("- 日常模式: {}", settings.daily_mode);
     println!("- 模型类型: {}", settings.model_type);
 
-    let model_config = get_model_config(&settings);
+    let model_config = get_model_config(&settings)?;
 
     println!("正在发送请求到: {}", model_config.api_url);
     println!("使用的模型: {}", model_config.model_name);
@@ -197,16 +248,16 @@ pub async fn translate_with_gpt(app: &AppHandle, original: &str) -> Result<Strin
         settings.daily_mode,
     );
 
-    println!("\n📋 生成的系统提示词:\n{}\n", system_prompt);
+    // println!("\n📋 生成的系统提示词:\n{}\n", system_prompt);
 
     let client = Client::new();
 
     let request_body = match settings.model_type.as_str() {
-        "GLM" => json!({
+        "SILICONFLOW" => json!({
             "model": model_config.model_name,
             "messages": [
                 {
-                    "role": "assistant",
+                    "role": "system",
                     "content": system_prompt
                 },
                 {
@@ -214,7 +265,31 @@ pub async fn translate_with_gpt(app: &AppHandle, original: &str) -> Result<Strin
                     "content": original
                 }
             ],
-            "max_tokens": 8000
+            "max_tokens": 300,
+            "temperature": 0.9,
+            "top_p": 0.9,
+            "stream": false,
+        }),
+        "BIGMODEL" => json!({
+            "model": model_config.model_name,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": original
+                }
+            ],
+            "max_tokens": 300,
+            "temperature": 0.9,
+            "top_p": 0.9,
+            "stream": false,
+            "thinking": {
+                "type": "disabled",
+                "clear_thinking": false
+            }
         }),
         _ => json!({
             "model": model_config.model_name,
@@ -234,9 +309,15 @@ pub async fn translate_with_gpt(app: &AppHandle, original: &str) -> Result<Strin
             "n": 1,
             "stream": false,
             "presence_penalty": 0.3,
-            "frequency_penalty": -0.3
+            "frequency_penalty": -0.3,
+            "thinking": {
+                "type": "disabled",
+                "clear_thinking": false
+            }
         }),
     };
+
+    println!("\n📋 请求体:\n{}\n", request_body);
 
     let response = match client
         .post(&model_config.api_url)
@@ -298,130 +379,4 @@ pub async fn translate_with_gpt(app: &AppHandle, original: &str) -> Result<Strin
     };
 
     Ok(translated)
-}
-
-
-/// 测试专用：直接调用翻译 API，不依赖 AppHandle
-pub async fn test_translate(
-    model_type: &str,
-    original: &str,
-    from: &str,
-    to: &str,
-) -> Result<String> {
-    use serde_json::Value;
-    use std::env;
-    
-    // 获取模型配置
-    let model_config = match model_type {
-        "testmodel" => crate::store::ModelConfig {
-            auth: env::var("DEEPSEEK_API_KEY")
-                .expect("请在 .env 文件中设置 DEEPSEEK_API_KEY"),
-            api_url: "https://api-inference.modelscope.cn/v1/chat/completions".to_string(),
-            model_name: "deepseek-ai/DeepSeek-V3.2".to_string(),
-        },
-        _ => return Err(anyhow::anyhow!("未知的模型类型: {}", model_type)),
-    };
-
-    println!("========================================");
-    println!("测试配置: 模型={}, API={}", model_type, model_config.api_url);
-    println!("模型名称: {}", model_config.model_name);
-    println!("原文: {}", original);
-    println!("翻译方向: {} -> {}", from, to);
-    println!("========================================");
-    
-    let system_prompt = get_system_prompt(from, to, "dota2", "toxic", false);
-
-    let client = Client::new();
-    let request_body = json!({
-        "model": model_config.model_name,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": original}
-        ],
-        "max_tokens": 300,
-        "temperature": 0.9,
-        "top_p": 0.7,
-        "n": 1,
-        "stream": false
-    });
-
-    println!("📤 发送请求...");
-    
-    let response_result = client
-        .post(&model_config.api_url)
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", model_config.auth))
-        .json(&request_body)
-        .send()
-        .await;
-
-    let response = match response_result {
-        Ok(resp) => {
-            let status = resp.status();
-            println!("📥 HTTP 状态码: {}", status);
-            
-            if !status.is_success() {
-                let error_text = resp.text().await?;
-                println!("❌ 错误响应: {}", error_text);
-                return Err(anyhow::anyhow!("API 返回错误状态: {}", status));
-            }
-            
-            resp
-        }
-        Err(e) => {
-            println!("❌ 请求失败: {}", e);
-            return Err(anyhow::anyhow!("网络请求失败: {}", e));
-        }
-    };
-
-    let json_result = response.json::<Value>().await;
-    
-    let json = match json_result {
-        Ok(j) => {
-            println!("\n📋 完整 API 响应:");
-            println!("{}", serde_json::to_string_pretty(&j).unwrap_or_else(|_| format!("{:?}", j)));
-            println!();
-            j
-        }
-        Err(e) => {
-            println!("❌ JSON 解析失败: {}", e);
-            return Err(anyhow::anyhow!("无法解析响应为 JSON: {}", e));
-        }
-    };
-
-    // 检查是否有错误信息
-    if let Some(error) = json.get("error") {
-        println!("❌ API 返回错误: {:?}", error);
-        return Err(anyhow::anyhow!("API 错误: {:?}", error));
-    }
-
-    // 尝试提取翻译结果
-    let translated = json
-        .get("choices")
-        .and_then(|choices| choices.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|choice| choice.get("message"))
-        .and_then(|message| message.get("content"))
-        .and_then(|content| content.as_str())
-        .ok_or_else(|| {
-            println!("❌ 无法从响应中提取内容");
-            println!("JSON 结构: {:?}", json);
-            anyhow::anyhow!("响应格式不符合预期，无法提取翻译结果")
-        })?;
-
-    let translated = translated.trim();
-    
-    // 处理 DeepSeek-R1 的 <think> 标签
-    let result = if let Some(pos) = translated.find("</think>") {
-        translated[pos + 8..].trim().to_string()
-    } else {
-        translated.to_string()
-    };
-
-    println!("========================================");
-    println!("✅ 翻译成功!");
-    println!("译文: {}", result);
-    println!("========================================");
-
-    Ok(result)
 }

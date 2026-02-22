@@ -62,18 +62,18 @@ const testOpenAIConnection = async (apiKey, baseUrl, modelName) => {
 
 const MODEL_OPTIONS = [
     {
-        id: 'deepseek',
-        name: 'DeepSeek',
+        id: 'MODELSCOPE',
+        name: '魔搭',
         modelName: 'deepseek-ai/DeepSeek-V3.2'
     },
     {
-        id: 'DeepSeek-OCR',  
-        name: 'DeepSeek-OCR',  
+        id: 'SILICONFLOW',  
+        name: '硅基流动',  
         modelName: 'deepseek-ai/DeepSeek-OCR'  
     },
     {
-        id: 'GLM',  
-        name: 'GLM',  
+        id: 'BIGMODEL',  
+        name: 'BigModel',  
         modelName: 'glm-4.7-flash'  
     },
     {
@@ -85,7 +85,8 @@ const MODEL_OPTIONS = [
 
 export default function Settings() {
     const { settings, updateSettings } = useStore();
-    const [activeModel, setActiveModel] = useState(settings?.model_type || 'deepseek');
+    const [activeModel, setActiveModel] = useState(settings?.model_type || 'MODELSCOPE');
+    const [systemModelConfigs, setSystemModelConfigs] = useState({});
     const [isTestingConnection, setIsTestingConnection] = useState(false);
     const [testInput, setTestInput] = useState('');
     const [testOutput, setTestOutput] = useState('');
@@ -96,6 +97,19 @@ export default function Settings() {
             setActiveModel(settings.model_type);
         }
     }, [settings?.model_type]);
+
+    useEffect(() => {
+        const loadSystemConfigs = async () => {
+            try {
+                const configs = await invoke('get_system_model_configs');
+                setSystemModelConfigs(configs || {});
+            } catch (error) {
+                console.error('加载系统模型配置失败:', error);
+            }
+        };
+
+        loadSystemConfigs();
+    }, []);
 
     const handleModelChange = async (model) => {
         setActiveModel(model);
@@ -121,6 +135,10 @@ export default function Settings() {
             setIsTestingTranslate(false);
         }
     };
+
+    const activeConfig = activeModel === 'custom'
+        ? (settings?.custom_model || {})
+        : (systemModelConfigs?.[activeModel] || {});
 
     return (
         <div className="h-full flex flex-col gap-6">
@@ -160,12 +178,6 @@ export default function Settings() {
                                         <Cube className="w-3.5 h-3.5 stroke-zinc-500" />
                                         <span className="text-xs text-zinc-500">{model.modelName}</span>
                                     </div>
-                                    {model.id.includes('deepseek') && (
-                                        <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 rounded-md">
-                                            <Sparkles className="w-3.5 h-3.5 stroke-blue-500" />
-                                            <span className="text-xs text-blue-500">硅基流动</span>
-                                        </div>
-                                    )}
                                 </div>
                                 <div className={`w-4 h-4 rounded-full border transition-all ${activeModel === model.id
                                     ? 'border-zinc-900 dark:border-zinc-100 bg-zinc-900 dark:bg-zinc-100 shadow-[0_0_0_1px_rgba(0,0,0,0.05),0_1px_2px_0_rgba(0,0,0,0.1)] dark:shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_1px_2px_0_rgba(255,255,255,0.1)]'
@@ -176,7 +188,7 @@ export default function Settings() {
                     </div>
                 </motion.div>
 
-                {/* 自定义API配置卡片 */}
+                {/* 系统模型配置展示 + 自定义配置卡片 */}
                 <motion.div
                     className="flex flex-col bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.1)] backdrop-blur-sm"
                     initial={{ opacity: 0, y: 20 }}
@@ -185,15 +197,28 @@ export default function Settings() {
                 >
                     <div className="flex items-center gap-3 text-sm text-zinc-500 mb-6">
                         <Server className="w-5 h-5 stroke-zinc-500" />
-                        自定义API配置
+                        {activeModel === 'custom' ? '自定义模型配置' : '系统模型配置'}
                     </div>
+                    {activeModel !== 'custom' && (
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg mb-4 border border-blue-200 dark:border-blue-900/30">
+                            <p className="text-xs text-blue-600 dark:text-blue-400 leading-relaxed">
+                                💡 系统模型参数从应用目录同级的 <code className="bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded">.env</code> 文件读取。
+                                {activeModel !== 'custom' && (
+                                    <>
+                                        <br/>
+                                        若要修改，请编辑 <code className="bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 rounded">.env</code> 文件后重启应用。
+                                    </>
+                                )}
+                            </p>
+                        </div>
+                    )}
                     <div className="space-y-4">
                         <div>
                             <label className="block text-sm text-zinc-500 mb-2">API Key</label>
                             <input
                                 type="text"
                                 disabled={activeModel !== 'custom'}
-                                value={settings?.custom_model?.auth || ''}
+                                value={activeConfig?.auth || ''}
                                 onChange={(e) => updateSettings({
                                     custom_model: {
                                         ...settings?.custom_model,
@@ -209,7 +234,7 @@ export default function Settings() {
                             <input
                                 type="text"
                                 disabled={activeModel !== 'custom'}
-                                value={settings?.custom_model?.api_url || ''}
+                                value={activeConfig?.api_url || ''}
                                 onChange={(e) => updateSettings({
                                     custom_model: {
                                         ...settings?.custom_model,
@@ -225,7 +250,7 @@ export default function Settings() {
                             <input
                                 type="text"
                                 disabled={activeModel !== 'custom'}
-                                value={settings?.custom_model?.model_name || ''}
+                                value={activeConfig?.model_name || ''}
                                 onChange={(e) => updateSettings({
                                     custom_model: {
                                         ...settings?.custom_model,
@@ -237,9 +262,6 @@ export default function Settings() {
                             />
                         </div>
                         <div className="pt-2 flex items-center justify-between">
-                            <p className="text-xs text-zinc-400">
-                                {activeModel === 'custom' ? '请填写完整的API配置信息' : '选择自定义模型以启用配置'}
-                            </p>
                             {activeModel === 'custom' && (
                                 <button
                                     onClick={async () => {
